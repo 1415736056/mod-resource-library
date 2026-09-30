@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#08131f">
+  <meta name="description" content="MOD 资源、封面、介绍和网盘链接的可视化管理面板">
+  <title>MOD 资源管理面板</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="styles.css?v=muo08dlq">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="面板导航">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">M</span>
+        <div>
+          <strong>MOD LIBRARY</strong>
+          <small>资源控制台</small>
+        </div>
+      </div>
+
+      <nav class="view-nav" aria-label="数据视图">
+        <button class="nav-item active" type="button" data-view="resources">
+          <span class="nav-index">01</span>
+          <span><b>资源总表</b><small id="navResourceCount">62 条主资源</small></span>
+        </button>
+        <button class="nav-item" type="button" data-view="candidates">
+          <span class="nav-index">02</span>
+          <span><b>新发现 MOD</b><small id="navCandidateCount">37 条候选</small></span>
+        </button>
+        <button class="nav-item" type="button" data-view="other-mod">
+          <span class="nav-index">03</span>
+          <span><b>其他 MOD</b><small id="navOtherModCount">网盘入口待核</small></span>
+        </button>
+        <button class="nav-item" type="button" data-view="box">
+          <span class="nav-index">04</span>
+          <span><b>流川盒子</b><small id="navBoxCount">39 条公开作品</small></span>
+        </button>
+        <button class="nav-item" type="button" data-view="bilibili">
+          <span class="nav-index">05</span>
+          <span><b>B站投稿审计</b><small id="navBiliCount">646 条投稿</small></span>
+        </button>
+        <button class="nav-item" type="button" data-view="dlc">
+          <span class="nav-index">06</span>
+          <span><b>非线性 DLC 目录</b><small id="navDlcCount">官网候选</small></span>
+        </button>
+        <button class="nav-item" type="button" data-view="monitor">
+          <span class="nav-index">07</span>
+          <span><b>关注与监控</b><small id="navWatchCount">15 位作者</small></span>
+        </button>
+        <button class="nav-item" type="button" data-view="link-workbench">
+          <span class="nav-index">08</span>
+          <span><b>DLC 补链筛选</b><small>批量匹配 · 待审导出</small></span>
+        </button>
+      </nav>
+
+      <section class="sidebar-section">
+        <p class="sidebar-label">作者</p>
+        <div id="authorButtons" class="author-list"></div>
+      </section>
+
+      <div class="sidebar-note">
+        <span class="pulse-dot" aria-hidden="true"></span>
+        <p><strong>只读资料库</strong><br>链接按核验层级标注；页面可达不等于文件可用。</p>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">MOD RESOURCE CONTROL DESK</p>
+          <h1 id="pageTitle">资源总表</h1>
+        </div>
+        <div class="topbar-actions">
+          <button id="layoutToggle" class="icon-button" type="button" aria-label="切换列表布局" title="切换布局">
+            <span aria-hidden="true">▦</span>
+          </button>
+          <button id="resetButton" class="secondary-button" type="button">恢复默认</button>
+        </div>
+      </header>
+
+      <section class="metric-strip" aria-label="资源统计">
+        <article>
+          <span class="metric-kicker">PRIMARY</span>
+          <strong id="metricPrimary">62</strong>
+          <small>主资源，含待核补链</small>
+        </article>
+        <article>
+          <span class="metric-kicker">QUARK</span>
+          <strong id="metricQuark">—</strong>
+          <small>含夸克地址，非可用证明</small>
+        </article>
+        <article>
+          <span class="metric-kicker">LOCAL</span>
+          <strong id="metricCovers">—</strong>
+          <small>主资源本地封面</small>
+        </article>
+        <article>
+          <span class="metric-kicker">BILI</span>
+          <strong id="metricBili">646</strong>
+          <small>投稿审计</small>
+        </article>
+      </section>
+
+      <section class="control-deck" aria-label="筛选资源">
+        <label class="search-field">
+          <span aria-hidden="true">⌕</span>
+          <input id="searchInput" type="search" autocomplete="off" placeholder="搜索标题、游戏、简介、BVID…">
+          <kbd>/</kbd>
+        </label>
+        <div class="filter-row">
+          <label>
+            <span>来源</span>
+            <select id="sourceFilter">
+              <option value="all">全部来源</option>
+            </select>
+          </label>
+          <label>
+            <span id="linkFilterLabel">网盘</span>
+            <select id="linkFilter">
+              <option value="all">全部状态</option>
+              <option value="quark">有夸克</option>
+              <option value="no-quark">无夸克</option>
+              <option value="inactive">过期 / 失效 / 施工中</option>
+            </select>
+          </label>
+          <label>
+            <span id="confidenceFilterLabel">匹配</span>
+            <select id="confidenceFilter">
+              <option value="all">全部置信度</option>
+              <option value="high">高置信</option>
+              <option value="medium">中置信</option>
+              <option value="low">低置信</option>
+              <option value="unmatched">未匹配</option>
+            </select>
+          </label>
+          <label>
+            <span>排序</span>
+            <select id="sortFilter">
+              <option value="default">原始顺序</option>
+              <option value="title">标题 A–Z</option>
+              <option value="newest">最近发布</option>
+              <option value="author">按作者</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="result-heading">
+        <div>
+          <p class="eyebrow" id="resultContext">RESOURCE INDEX</p>
+          <h2><span id="resultCount">0</span> 条结果</h2>
+        </div>
+        <p id="resultHint">可复制标题、介绍和夸克链接，也可下载封面。</p>
+      </section>
+
+      <section id="resultGrid" class="resource-grid" aria-live="polite"></section>
+      <nav id="pagination" class="pagination" aria-label="投稿分页" hidden></nav>
+      <section id="monitorPanel" class="monitor-panel" aria-live="polite" hidden></section>
+      <section id="linkWorkbench" class="link-workbench" aria-live="polite" hidden></section>
+
+      <section id="emptyState" class="empty-state" hidden>
+        <span aria-hidden="true">∅</span>
+        <h2>没有符合条件的记录</h2>
+        <p>试试清除搜索词或放宽筛选条件。</p>
+        <button type="button" data-action="reset">清除筛选</button>
+      </section>
+    </main>
+  </div>
+
+  <div id="bulkBar" class="bulk-bar" hidden>
+    <strong><span id="selectedCount">0</span> 项已选</strong>
+    <button type="button" data-bulk="titles">复制标题</button>
+    <button type="button" data-bulk="links">复制夸克分享</button>
+    <button type="button" data-bulk="content">复制标题 + 内容</button>
+    <button type="button" data-bulk="clear" class="quiet">清空</button>
+  </div>
+
+  <dialog id="detailDialog" class="detail-dialog">
+    <div class="dialog-shell">
+      <button class="dialog-close" type="button" data-action="close-dialog" aria-label="关闭详情">×</button>
+      <div id="detailContent"></div>
+    </div>
+  </dialog>
+
+  <div id="copyFallback" class="fallback-panel" hidden>
+    <div>
+      <h2>请手动复制</h2>
+      <p>浏览器没有授予剪贴板权限，已将完整内容放在下面。</p>
+      <textarea id="fallbackText" readonly></textarea>
+      <button type="button" data-action="close-fallback">关闭</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="data.js?v=muo08dlq"></script>
+  <script src="app.js?v=muo08dlq"></script>
+</body>
+</html>
