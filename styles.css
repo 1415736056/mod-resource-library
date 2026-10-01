@@ -623,6 +623,13 @@ button:disabled {
   -webkit-line-clamp: 2;
 }
 
+.link-notice {
+  color: #e2bd7e;
+  font-size: 12px;
+  line-height: 1.65;
+  margin: 8px 0;
+}
+
 .card-summary {
   display: -webkit-box;
   min-height: 3.1em;

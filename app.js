@@ -60,7 +60,7 @@
     box: {
       title: "流川盒子作品",
       context: "NEWBEEBOX PUBLIC RECORDS",
-      hint: "公开页面的完整介绍、版本信息与多图素材。",
+      hint: "39 条盒子作品；" + (DATA.stats.boxWithPackageEntrances || 0) + " 条可查看作者同游戏整合包入口。盒子原页未公开作品专用网盘，入口不保证包含单项模组或对应旧版本。",
       items: DATA.boxRecords
     },
     bilibili: {
@@ -107,6 +107,9 @@
 
   var roleLabels = {
     mod_package: "MOD 包",
+    mixed_mod_game: "MOD 与游戏本体混合包",
+    successor_mod_package: "作者指定的后继 MOD 包",
+    related_mod_package: "作者同游戏整合包（关联入口）",
     game_files: "游戏本体",
     patch: "补丁",
     dlc_collection: "多游戏 DLC 来源合集（待核）",
@@ -224,18 +227,31 @@
     return lines.join("\n");
   }
 
+  function cloudLinks(record) {
+    return (record.links || []).concat(record.relatedLinks || []);
+  }
+
+  function linkUnavailable(link) {
+    return ["cancelled", "not_found", "restricted_or_empty", "access_restricted", "empty"].includes(link.liveStatus);
+  }
+
+  function copyableLinks(record) {
+    return cloudLinks(record).filter(function (link) { return link.url && !linkUnavailable(link); });
+  }
+
   function linksText(record) {
-    var links = (record.links || []).filter(function (link) {
-      return link.provider === "夸克" && (!link.liveStatus || link.liveStatus === "live_confirmed");
-    });
+    var links = copyableLinks(record);
     if (!links.length) return "";
     var blocks = links.map(function (link, index) {
       var lines = [
         "标题：" + record.title,
         "类型：" + (roleLabels[link.role] || link.role || "资源"),
-        "夸克：" + link.url
+        link.provider + "：" + link.url
       ];
       if (link.code) lines.push("提取码：" + link.code);
+      if (link.status) lines.push("状态：" + link.status);
+      if (link.notes) lines.push("说明：" + link.notes);
+      if (link.checkedAt) lines.push("核验时间：" + link.checkedAt);
       if (links.length > 1) lines.unshift("链接 " + (index + 1));
       return lines.join("\n");
     });
@@ -317,7 +333,7 @@
       ["thunder", "迅雷"], ["other-provider", "其他网盘"],
       ["root-nonempty", "公开顶层非空"], ["needs-review", "未核或异常"]
     ] : [
-      ["all", "全部状态"], ["quark", "有夸克"], ["no-quark", "无夸克"],
+      ["all", "全部状态"], ["with-cloud", "有网盘入口"], ["no-cloud", "无网盘入口"], ["quark", "有夸克"], ["no-quark", "无夸克"],
       ["inactive", "过期 / 失效 / 施工中"]
     ];
     var titleOptions = other ? [
@@ -376,7 +392,9 @@
       } else {
         if (state.source !== "all" && item.sourceType !== state.source) return false;
         if (state.view !== "dlc") {
-          var quark = (item.links || []).some(function (link) { return link.provider === "夸克"; });
+          var quark = cloudLinks(item).some(function (link) { return link.provider === "夸克"; });
+          if (state.link === "with-cloud" && !copyableLinks(item).length) return false;
+          if (state.link === "no-cloud" && copyableLinks(item).length) return false;
           if (state.link === "quark" && !quark) return false;
           if (state.link === "no-quark" && quark) return false;
           if (state.link === "inactive" && !/(过期|失效|施工中|仅迅雷|仅百度|缺少)/.test(item.status || "")) return false;
@@ -430,10 +448,8 @@
   }
 
   function resourceCard(item) {
-    var confirmedQuark = (item.links || []).filter(function (link) {
-      return link.provider === "夸克" && (!link.liveStatus || link.liveStatus === "live_confirmed");
-    });
-    var hasQuark = confirmedQuark.length > 0;
+    var links = copyableLinks(item);
+    var providers = Array.from(new Set(links.map(function (link) { return link.provider; })));
     var summary = item.summary || item.description || item.videoTitle || item.matchNote || "该来源没有采集到介绍";
     var warning = /(过期|失效|施工中|仅迅雷|仅百度|缺少|待补|文件未核)/.test(item.status || "");
     return "<article class='resource-card' data-id='" + escapeHtml(item.id) + "'>" +
@@ -446,8 +462,12 @@
         "<div class='card-meta-line'><b>" + escapeHtml(item.author) + "</b><span>" + escapeHtml(item.game || item.category || "资源") + "</span></div>" +
         "<h3 class='card-title' title='" + escapeHtml(item.title) + "'>" + escapeHtml(item.title) + "</h3>" +
         "<p class='card-summary'>" + escapeHtml(summary) + "</p>" +
+        (item.linkNotice ? "<p class='link-notice'>" + escapeHtml(item.linkNotice) + "</p>" : "") +
         "<div class='badge-row'>" +
-          (hasQuark ? "<span class='badge quark'>" + (item.sourceType === "B站新发现" ? "文件列表已核夸克" : "夸克地址") + " × " + confirmedQuark.length + "</span>" : "<span class='badge'>无已核夸克</span>") +
+          (links.length ? providers.map(function (provider) {
+            return "<span class='badge quark'>" + escapeHtml(provider) + "入口 × " + links.filter(function (link) { return link.provider === provider; }).length + "</span>";
+          }).join("") : "<span class='badge warning'>尚无网盘入口</span>") +
+          (links.some(function (link) { return link.liveStatus === "live_confirmed"; }) ? "<span class='badge'>文件列表已核</span>" : "") +
           (item.stagedLinkCount ? "<span class='badge warning'>" + (item.sourceType === "B站历史整合包" ? "简介明文待核" : "文档补链待核") + " × " + item.stagedLinkCount + "</span>" : "") +
           confidenceBadge(item) +
           "<span class='badge " + (warning ? "warning" : "") + "'>" + escapeHtml(item.status || "未采集状态") + "</span>" +
@@ -455,9 +475,9 @@
         "<div class='card-actions'>" +
           "<button type='button' data-action='copy-title'>复制标题</button>" +
           "<button type='button' data-action='copy-content'" + (!item.description ? " disabled title='该来源未采集到介绍'" : "") + ">复制内容</button>" +
-          "<button type='button' data-action='copy-links'" + (!hasQuark ? " disabled" : "") + ">复制夸克</button>" +
+          "<button type='button' data-action='copy-links'" + (!links.length ? " disabled" : "") + ">" + (item.relatedLinks && item.relatedLinks.length ? "复制整合包入口" : "复制网盘链接") + "</button>" +
           "<button type='button' data-action='download-cover'" + (!(item.coverOriginal || item.cover) ? " disabled" : "") + ">下载图片</button>" +
-          "<button type='button' class='primary' data-action='details'>查看详情</button>" +
+          "<button type='button' class='primary' data-action='details'>" + (links.length ? "查看网盘 / 详情" : "查看获取方式") + "</button>" +
         "</div>" +
       "</div>" +
     "</article>";
@@ -874,12 +894,13 @@
   }
 
   function linkCards(record) {
-    var html = (record.links || []).map(function (link, index) {
-      var unavailable = ["cancelled", "not_found", "restricted_or_empty", "access_restricted", "empty"].includes(link.liveStatus);
+    var html = (record.linkNotice ? "<p class='link-notice'>" + escapeHtml(record.linkNotice) + "</p>" : "") + cloudLinks(record).map(function (link, index) {
+      var unavailable = linkUnavailable(link);
       return "<article class='link-card'>" +
         "<div class='link-card-head'><span>" + escapeHtml(link.provider + " · " + (roleLabels[link.role] || link.role || "资源")) + "</span><small>" + escapeHtml(link.code ? "提取码 " + link.code : "无提取码") + "</small></div>" +
         "<code class='link-url'>" + escapeHtml(link.url) + "</code>" +
         (link.status ? "<p class='link-status'>" + escapeHtml(link.status) + (link.checkedAt ? "<br>核验：" + escapeHtml(link.checkedAt) : "") + "</p>" : "") +
+        (link.notes ? "<p class='link-status'>" + escapeHtml(link.notes) + "</p>" : "") +
         "<div class='link-card-actions'>" +
           "<button type='button' data-detail-action='copy-one-link' data-link-index='" + index + "'>复制分享信息</button>" +
           (unavailable ? "<span class='link-disabled'>不可作为可用链接</span>" : "<a class='primary' href='" + escapeHtml(link.url) + "' target='_blank' rel='noopener'>打开链接</a>") +
@@ -1037,7 +1058,7 @@
       copyText(share.provider + "：" + share.url + (share.code ? "\n提取码：" + share.code : "") + "\n核验：" + share.status, "网盘分享信息");
     }
     if (type === "copy-content") copyText(record.description, "完整介绍");
-    if (type === "copy-links") copyText(linksText(record), "夸克分享信息");
+    if (type === "copy-links") copyText(linksText(record), "网盘分享信息");
     if (type === "download-cover") downloadImage(record.cover || record.coverOriginal, record.title + "_封面");
     if (type === "details") openDetails(record, action);
     if (type === "open-bili") window.open(record.url, "_blank", "noopener");
@@ -1164,7 +1185,7 @@
     }
     if (button.dataset.bulk === "links") {
       var text = records.map(linksText).filter(Boolean).join("\n\n");
-      copyText(text, "已选夸克分享信息");
+      copyText(text, "已选网盘分享信息");
     }
     if (button.dataset.bulk === "content") {
       copyText(records.map(shareText).join("\n\n————————\n\n"), "已选资源内容");
@@ -1185,8 +1206,8 @@
     if (action === "download-cover") downloadImage(activeRecord.cover || activeRecord.coverOriginal, activeRecord.title + "_封面");
     if (action === "copy-plain") copyText(button.dataset.value, "链接");
     if (action === "copy-one-link") {
-      var link = activeRecord.links[Number(button.dataset.linkIndex)];
-      var text = "标题：" + activeRecord.title + "\n类型：" + (roleLabels[link.role] || link.role || "资源") + "\n" + link.provider + "：" + link.url + (link.code ? "\n提取码：" + link.code : "") + (link.status ? "\n状态：" + link.status : "") + (link.checkedAt ? "\n核验时间：" + link.checkedAt : "");
+      var link = cloudLinks(activeRecord)[Number(button.dataset.linkIndex)];
+      var text = "标题：" + activeRecord.title + "\n类型：" + (roleLabels[link.role] || link.role || "资源") + "\n" + link.provider + "：" + link.url + (link.code ? "\n提取码：" + link.code : "") + (link.status ? "\n状态：" + link.status : "") + (link.notes ? "\n说明：" + link.notes : "") + (link.checkedAt ? "\n核验时间：" + link.checkedAt : "");
       copyText(text, "分享信息");
     }
     if (action === "download-image") {
