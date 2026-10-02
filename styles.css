@@ -686,7 +686,7 @@ button:disabled {
 
 .card-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
 }
 
@@ -699,7 +699,9 @@ button:disabled {
   padding: 0 10px;
   color: var(--text);
   text-decoration: none;
-  white-space: nowrap;
+  white-space: normal;
+  text-align: center;
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: rgba(5, 12, 19, .42);
@@ -831,6 +833,11 @@ button:disabled {
   background: rgba(13, 25, 38, .96);
   box-shadow: var(--shadow);
   backdrop-filter: blur(16px);
+}
+
+.bulk-link-buttons {
+  display: inline-flex;
+  gap: 8px;
 }
 
 .bulk-bar strong {

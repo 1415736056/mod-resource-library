@@ -231,31 +231,50 @@
     return (record.links || []).concat(record.relatedLinks || []);
   }
 
+  var cloudProviderNames = {
+    "百度": "百度网盘",
+    "夸克": "夸克网盘",
+    "迅雷": "迅雷网盘",
+    "中国移动云盘": "中国移动云盘",
+    "阿里云盘": "阿里云盘",
+    "UC": "UC网盘"
+  };
+
+  function providerName(provider) {
+    return cloudProviderNames[provider] || provider + "链接";
+  }
+
+  function providerLinks(record, includeUnavailable) {
+    return cloudLinks(record).filter(function (link) {
+      return link.url && cloudProviderNames[link.provider] && (includeUnavailable || !linkUnavailable(link));
+    });
+  }
+
+  function providersFor(links) {
+    return Object.keys(cloudProviderNames).filter(function (provider) {
+      return links.some(function (link) { return link.provider === provider; });
+    });
+  }
+
   function linkUnavailable(link) {
     return ["cancelled", "not_found", "restricted_or_empty", "access_restricted", "empty"].includes(link.liveStatus);
   }
 
   function copyableLinks(record) {
-    return cloudLinks(record).filter(function (link) { return link.url && !linkUnavailable(link); });
+    return providerLinks(record, false);
   }
 
-  function linksText(record) {
-    var links = copyableLinks(record);
-    if (!links.length) return "";
-    var blocks = links.map(function (link, index) {
-      var lines = [
-        "标题：" + record.title,
-        "类型：" + (roleLabels[link.role] || link.role || "资源"),
-        link.provider + "：" + link.url
-      ];
-      if (link.code) lines.push("提取码：" + link.code);
-      if (link.status) lines.push("状态：" + link.status);
-      if (link.notes) lines.push("说明：" + link.notes);
-      if (link.checkedAt) lines.push("核验时间：" + link.checkedAt);
-      if (links.length > 1) lines.unshift("链接 " + (index + 1));
-      return lines.join("\n");
-    });
-    return blocks.join("\n\n");
+  function linksText(record, provider, includeUnavailable) {
+    return Array.from(new Set(providerLinks(record, includeUnavailable)
+      .filter(function (link) { return link.provider === provider; })
+      .map(function (link) { return String(link.url).trim(); }))).join("\n");
+  }
+
+  function providerCopyButtons(record, includeUnavailable) {
+    return providersFor(providerLinks(record, includeUnavailable)).map(function (provider) {
+      return "<button type='button' data-action='copy-provider' data-provider='" + escapeHtml(provider) + "'" +
+        (includeUnavailable ? " data-include-unavailable='true'" : "") + ">复制" + escapeHtml(providerName(provider)) + "</button>";
+    }).join("");
   }
 
   async function downloadImage(url, title) {
@@ -475,7 +494,7 @@
         "<div class='card-actions'>" +
           "<button type='button' data-action='copy-title'>复制标题</button>" +
           "<button type='button' data-action='copy-content'" + (!item.description ? " disabled title='该来源未采集到介绍'" : "") + ">复制内容</button>" +
-          "<button type='button' data-action='copy-links'" + (!links.length ? " disabled" : "") + ">" + (item.relatedLinks && item.relatedLinks.length ? "复制整合包入口" : "复制网盘链接") + "</button>" +
+          providerCopyButtons(item, false) +
           "<button type='button' data-action='download-cover'" + (!(item.coverOriginal || item.cover) ? " disabled" : "") + ">下载图片</button>" +
           "<button type='button' class='primary' data-action='details'>" + (links.length ? "查看网盘 / 详情" : "查看获取方式") + "</button>" +
         "</div>" +
@@ -502,7 +521,7 @@
         "</div>" +
         "<div class='card-actions'>" +
           "<button type='button' data-action='copy-title'>复制来源标题</button>" +
-          "<button type='button' data-action='copy-share'>复制网盘链接</button>" +
+          providerCopyButtons(item, true) +
           "<button type='button' data-action='download-cover'" + (hasCover ? "" : " disabled") + ">下载视频封面</button>" +
           "<button type='button' class='primary' data-action='details'>查看来源与核验</button>" +
         "</div>" +
@@ -902,7 +921,7 @@
         (link.status ? "<p class='link-status'>" + escapeHtml(link.status) + (link.checkedAt ? "<br>核验：" + escapeHtml(link.checkedAt) : "") + "</p>" : "") +
         (link.notes ? "<p class='link-status'>" + escapeHtml(link.notes) + "</p>" : "") +
         "<div class='link-card-actions'>" +
-          "<button type='button' data-detail-action='copy-one-link' data-link-index='" + index + "'>复制分享信息</button>" +
+          "<button type='button' data-detail-action='copy-one-link' data-link-index='" + index + "'>复制" + escapeHtml(providerName(link.provider)) + "</button>" +
           (unavailable ? "<span class='link-disabled'>不可作为可用链接</span>" : "<a class='primary' href='" + escapeHtml(link.url) + "' target='_blank' rel='noopener'>打开链接</a>") +
         "</div>" +
       "</article>";
@@ -1025,6 +1044,10 @@
   function updateBulkBar() {
     $("#selectedCount").textContent = selected.size;
     $("#bulkBar").hidden = selected.size === 0;
+    var links = Array.from(selected).map(recordById).filter(Boolean).flatMap(copyableLinks);
+    $("#bulkLinkButtons").innerHTML = providersFor(links).map(function (provider) {
+      return "<button type='button' data-bulk='links' data-provider='" + escapeHtml(provider) + "'>复制" + escapeHtml(providerName(provider)) + "</button>";
+    }).join("");
   }
 
   function clearSelection() {
@@ -1053,12 +1076,9 @@
     if (!record) return;
     var type = action.dataset.action;
     if (type === "copy-title") copyText(record.title, "标题");
-    if (type === "copy-share") {
-      var share = record.links[0];
-      copyText(share.provider + "：" + share.url + (share.code ? "\n提取码：" + share.code : "") + "\n核验：" + share.status, "网盘分享信息");
-    }
     if (type === "copy-content") copyText(record.description, "完整介绍");
-    if (type === "copy-links") copyText(linksText(record), "网盘分享信息");
+    if (type === "copy-provider") copyText(linksText(record, action.dataset.provider,
+      action.dataset.includeUnavailable === "true"), providerName(action.dataset.provider) + "链接");
     if (type === "download-cover") downloadImage(record.cover || record.coverOriginal, record.title + "_封面");
     if (type === "details") openDetails(record, action);
     if (type === "open-bili") window.open(record.url, "_blank", "noopener");
@@ -1184,8 +1204,10 @@
       copyText(records.map(function (record) { return record.title; }).join("\n"), "已选标题");
     }
     if (button.dataset.bulk === "links") {
-      var text = records.map(linksText).filter(Boolean).join("\n\n");
-      copyText(text, "已选网盘分享信息");
+      var text = Array.from(new Set(records.map(function (record) {
+        return linksText(record, button.dataset.provider, false);
+      }).filter(Boolean).join("\n").split("\n"))).join("\n");
+      copyText(text, "已选" + providerName(button.dataset.provider) + "链接");
     }
     if (button.dataset.bulk === "content") {
       copyText(records.map(shareText).join("\n\n————————\n\n"), "已选资源内容");
@@ -1207,8 +1229,7 @@
     if (action === "copy-plain") copyText(button.dataset.value, "链接");
     if (action === "copy-one-link") {
       var link = cloudLinks(activeRecord)[Number(button.dataset.linkIndex)];
-      var text = "标题：" + activeRecord.title + "\n类型：" + (roleLabels[link.role] || link.role || "资源") + "\n" + link.provider + "：" + link.url + (link.code ? "\n提取码：" + link.code : "") + (link.status ? "\n状态：" + link.status : "") + (link.notes ? "\n说明：" + link.notes : "") + (link.checkedAt ? "\n核验时间：" + link.checkedAt : "");
-      copyText(text, "分享信息");
+      copyText(String(link.url || "").trim(), providerName(link.provider) + "链接");
     }
     if (action === "download-image") {
       var image = activeRecord.images[Number(button.dataset.imageIndex)];
