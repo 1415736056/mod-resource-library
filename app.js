@@ -193,24 +193,47 @@
     }
   }
 
+  function contentText(record) {
+    if (String(record.description || "").trim()) return String(record.description).trim();
+    var lines = ["尚未采集到作者详细介绍。以下为当前已保存的说明："];
+    if (record.summary) lines.push("已有摘要：" + record.summary);
+    if (record.videoTitle) lines.push("关联视频标题：" + record.videoTitle);
+    if (record.matchNote) lines.push("匹配说明：" + record.matchNote);
+    if (record.linkNotice) lines.push("获取说明：" + record.linkNotice);
+    if (record.status) lines.push("资源状态：" + record.status);
+    return lines.join("\n\n");
+  }
+
+  function shareUrl(link) {
+    var url = String(link.url || "").trim();
+    var code = String(link.code || "").trim();
+    if (!/^[A-Za-z0-9]{3,10}$/.test(code)) return url;
+    try {
+      var parsed = new URL(url);
+      if (["pan.baidu.com", "pan.quark.cn", "pan.xunlei.com"].includes(parsed.hostname) && !parsed.searchParams.get("pwd")) {
+        parsed.searchParams.set("pwd", code);
+        return parsed.href;
+      }
+    } catch (error) { /* 原始地址仍可查看，不能为无效 URL 构造分享参数。 */ }
+    return url;
+  }
+
   function shareText(record) {
     var lines = [];
     lines.push("标题：" + record.title);
     if (record.author) lines.push("作者：" + record.author);
     if (record.sourceType) lines.push("来源：" + record.sourceType);
     if (record.status) lines.push("状态：" + record.status);
-    if (record.description) {
-      lines.push("");
-      lines.push("内容：");
-      lines.push(record.description);
-    }
+    lines.push("");
+    lines.push("内容：");
+    lines.push(contentText(record));
     if (record.videoTitle) lines.push("对应视频标题：" + record.videoTitle);
     if (record.links && record.links.length) {
       lines.push("");
       lines.push("网盘链接：");
       record.links.forEach(function (link, index) {
         lines.push((index + 1) + ". " + (roleLabels[link.role] || link.role || "资源") + "｜" + link.provider + (link.status ? "｜" + link.status : ""));
-        lines.push(link.url);
+        lines.push(shareUrl(link));
         if (link.code) lines.push("提取码：" + link.code);
         if (link.checkedAt) lines.push("核验时间：" + link.checkedAt);
       });
@@ -267,7 +290,7 @@
   function linksText(record, provider, includeUnavailable) {
     return Array.from(new Set(providerLinks(record, includeUnavailable)
       .filter(function (link) { return link.provider === provider; })
-      .map(function (link) { return String(link.url).trim(); }))).join("\n");
+      .map(shareUrl))).join("\n");
   }
 
   function providerCopyButtons(record, includeUnavailable) {
@@ -493,7 +516,7 @@
         "</div>" +
         "<div class='card-actions'>" +
           "<button type='button' data-action='copy-title'>复制标题</button>" +
-          "<button type='button' data-action='copy-content'" + (!item.description ? " disabled title='该来源未采集到介绍'" : "") + ">复制内容</button>" +
+          "<button type='button' data-action='copy-content'" + (!item.description ? " title='复制已有说明；作者详细介绍尚未采集'" : "") + ">复制内容</button>" +
           providerCopyButtons(item, false) +
           "<button type='button' data-action='download-cover'" + (!(item.coverOriginal || item.cover) ? " disabled" : "") + ">下载图片</button>" +
           "<button type='button' class='primary' data-action='details'>" + (links.length ? "查看网盘 / 详情" : "查看获取方式") + "</button>" +
@@ -521,6 +544,7 @@
         "</div>" +
         "<div class='card-actions'>" +
           "<button type='button' data-action='copy-title'>复制来源标题</button>" +
+          "<button type='button' data-action='copy-content'>复制内容</button>" +
           providerCopyButtons(item, true) +
           "<button type='button' data-action='download-cover'" + (hasCover ? "" : " disabled") + ">下载视频封面</button>" +
           "<button type='button' class='primary' data-action='details'>查看来源与核验</button>" +
@@ -561,7 +585,7 @@
         "<h3 class='card-title' title='" + escapeHtml(item.title) + "'>" + escapeHtml(item.title) + "</h3>" +
         "<p class='card-summary'>" + escapeHtml(item.summary || "官网摘要未提供") + "</p>" +
         "<div class='badge-row'>" +
-          (item.dlcEvidence ? "<span class='badge quark'>夸克厂商合集 · 已读目录</span><span class='badge'>官网清单 " + item.dlcEvidence.claimedNames.length + " 项</span>" : "<span class='badge'>尚未定位最终网盘</span>") +
+          (item.dlcEvidence ? "<span class='badge quark'>夸克厂商合集 · 已读目录</span><span class='badge'>官网清单 " + item.dlcEvidence.claimedNames.length + " 项</span>" : item.links.length ? "<span class='badge'>夸克分享 URL 已解析 · 文件未核</span>" : "<span class='badge'>尚未定位最终网盘</span>") +
           "<span class='badge'>专栏候选 " + item.articleMatchCount + "</span><span class='badge'>视频候选 " + item.videoMatchCount + "</span>" +
         "</div>" +
         "<div class='card-actions'><button type='button' data-action='copy-title'>复制标题</button><button type='button' data-action='download-cover'>下载图片</button><button type='button' class='primary' data-action='details'>查看对应来源</button></div>" +
@@ -809,7 +833,7 @@
     });
     var cards = filtered.slice(0, 36).map(function (record) {
       return "<article class='link-review-row'><div><strong>" + escapeHtml(record.game) + "</strong><small>" +
-        (record.dlcEvidence ? "厂商合集目录已读 · " + record.dlcEvidence.files.length + " 文件" : record.routeLinks.length ? "官网中转入口 " + record.routeLinks.length + " 条 · 最终网盘待核" : "未见明确中转入口或尚未抓取") +
+        (record.dlcEvidence ? "厂商合集目录已读 · " + record.dlcEvidence.files.length + " 文件" : record.links.length ? "最终分享 URL 已解析 · 游戏目录待核" : record.routeLinks.length ? "官网中转入口 " + record.routeLinks.length + " 条 · 最终网盘待核" : "未见明确中转入口或尚未抓取") +
         "</small></div><div class='link-review-actions'><a href='" + escapeHtml(record.sourceUrl) + "' target='_blank' rel='noopener'>官网</a>" +
         (record.routeLinks[0] ? "<a href='" + escapeHtml(record.routeLinks[0]) + "' target='_blank' rel='noopener'>中转</a>" : "") + "</div></article>";
     }).join("");
@@ -824,7 +848,7 @@
         "<textarea id='replacementOutput' rows='8' readonly>" + escapeHtml(replacementPreview.text) + "</textarea><button type='button' data-workbench='export-replacement'>下载替换预览 TXT</button>") + "</div>" : "";
     $("#linkWorkbench").innerHTML =
       "<div class='workbench-summary'><div><strong>" + DATA.stats.dlcCatalog + "</strong><span>官网文章</span></div><div><strong>" + DATA.stats.dlcWithIntermediate + "</strong><span>文章含中转入口</span></div><div><strong>" + DATA.stats.dlcUniqueIntermediate + "</strong><span>去重中转 URL</span></div><div><strong>" + DATA.stats.dlcFinalShares + "</strong><span>已解析的最终网盘分享</span></div><div><strong>" + DATA.stats.dlcCloudGames + "</strong><span>已对应游戏目录</span></div></div>" +
-      "<p class='workbench-note'>当前只有 " + DATA.stats.dlcCloudCollections + " 个厂商合集最终分享被读取公开目录；" + DATA.stats.dlcCloudFiles + " 个游戏目录文件中，" + DATA.stats.dlcNamedPatchFiles + " 个仅凭文件名归为 DLC 相关补丁/分组/增量，其余是说明、演示、配置、工具等，不是‘漏匹配的 DLC’。中转页或网盘页面可达都不代表文件可用或内容合法。</p>" +
+      "<p class='workbench-note'>已解析的分享中只有 " + DATA.stats.dlcCloudCollections + " 个厂商合集读取过公开目录；" + DATA.stats.dlcCloudFiles + " 个游戏目录文件中，" + DATA.stats.dlcNamedPatchFiles + " 个仅凭文件名归为 DLC 相关补丁/分组/增量，其余是说明、演示、配置、工具等。其余分享只观察到最终 URL，不代表游戏目录、文件可用或内容授权。</p>" +
       "<section class='workbench-block'><div class='workbench-heading'><div><p class='eyebrow'>01 · SOURCE</p><h2>按文章核对原链接</h2></div><p>官网、中转和最终分享分别记录；不要把中转页当成已核验网盘。</p></div><div class='workbench-filters'><input id='workbenchSearch' type='search' placeholder='筛选游戏或文章标题' value='" + escapeHtml(workbenchSearch) + "'><select id='workbenchStatus'><option value='route'" + (workbenchStatus === "route" ? " selected" : "") + ">有中转、无最终目录</option><option value='no-route'" + (workbenchStatus === "no-route" ? " selected" : "") + ">未见中转</option><option value='cloud'" + (workbenchStatus === "cloud" ? " selected" : "") + ">已读合集目录</option><option value='all'" + (workbenchStatus === "all" ? " selected" : "") + ">全部文章</option></select></div><p class='workbench-count'>符合条件 " + filtered.length + " 篇；显示前 " + Math.min(36, filtered.length) + " 篇。</p><div class='link-review-list'>" + cards + "</div></section>" +
       "<section class='workbench-block'><div class='workbench-heading'><div><p class='eyebrow'>02 · MATCH</p><h2>批量分享标题匹配</h2></div><p>本页本地处理，不会上传或保存粘贴的链接；导出后仍需逐条核验。</p></div><p class='workbench-note'>每行格式：<code>游戏/原文件名 | size=字节数 | https://真实网盘分享</code>。有逐文件 <code>jfile-…</code> 对应码时可放在名称里。仅有域名或中转链接不能替换。</p><textarea id='batchLinkInput' rows='8' placeholder='例如：游戏名/原文件名.zip | size=1234567 | https://pan.quark.cn/s/…'>" + escapeHtml(batchInputValue) + "</textarea><div class='workbench-controls'><button type='button' class='primary' data-workbench='match'>生成匹配建议</button><small>最多处理前 500 行；不会修改官网或原链接。</small></div>" + proposals + "</section>" +
       "<section class='workbench-block'><div class='workbench-heading'><div><p class='eyebrow'>03 · REPLACE</p><h2>旧链接精确替换预览</h2></div><p>给出你自己的文章文本与旧、新链接映射；保留原文，不改第三方网站。</p></div><p class='workbench-note'>映射每行格式：<code>完整旧链接 | 完整新链接</code>，支持 <code>magnet:?</code> 或 HTTPS 旧链接。只替换原文中实际存在的完整链接，不按域名模糊替换；新分享是否可用仍需核验。</p><textarea id='replacementSource' rows='6' placeholder='粘贴你要改写的文章文本或 HTML'>" + escapeHtml(replacementSource) + "</textarea><textarea id='replacementMap' rows='4' placeholder='https://旧链接 | https://新链接'>" + escapeHtml(replacementMap) + "</textarea><div class='workbench-controls'><button type='button' class='primary' data-workbench='preview-replacement'>生成替换预览</button><small>仅在当前浏览器中处理，不会自动发布或写回。</small></div>" + replacementResult + "</section>";
@@ -915,14 +939,15 @@
   function linkCards(record) {
     var html = (record.linkNotice ? "<p class='link-notice'>" + escapeHtml(record.linkNotice) + "</p>" : "") + cloudLinks(record).map(function (link, index) {
       var unavailable = linkUnavailable(link);
+      var url = shareUrl(link);
       return "<article class='link-card'>" +
         "<div class='link-card-head'><span>" + escapeHtml(link.provider + " · " + (roleLabels[link.role] || link.role || "资源")) + "</span><small>" + escapeHtml(link.code ? "提取码 " + link.code : "无提取码") + "</small></div>" +
-        "<code class='link-url'>" + escapeHtml(link.url) + "</code>" +
+        "<code class='link-url'>" + escapeHtml(url) + "</code>" +
         (link.status ? "<p class='link-status'>" + escapeHtml(link.status) + (link.checkedAt ? "<br>核验：" + escapeHtml(link.checkedAt) : "") + "</p>" : "") +
         (link.notes ? "<p class='link-status'>" + escapeHtml(link.notes) + "</p>" : "") +
         "<div class='link-card-actions'>" +
           "<button type='button' data-detail-action='copy-one-link' data-link-index='" + index + "'>复制" + escapeHtml(providerName(link.provider)) + "</button>" +
-          (unavailable ? "<span class='link-disabled'>不可作为可用链接</span>" : "<a class='primary' href='" + escapeHtml(link.url) + "' target='_blank' rel='noopener'>打开链接</a>") +
+          (unavailable ? "<span class='link-disabled'>不可作为可用链接</span>" : "<a class='primary' href='" + escapeHtml(url) + "' target='_blank' rel='noopener'>打开链接</a>") +
         "</div>" +
       "</article>";
     }).join("");
@@ -1002,7 +1027,7 @@
     lastFocused = trigger || document.activeElement;
     var hero = record.cover || record.coverOriginal;
     var subtitle = record.videoTitle || record.summary || record.bvid || "原始采集记录";
-    var description = record.description || "该来源未采集到介绍。";
+    var description = contentText(record);
     detailContent.innerHTML =
       "<section class='detail-hero'>" +
         (hero ? "<img src='" + escapeHtml(hero) + "' alt=''>" : "") +
@@ -1021,7 +1046,7 @@
             "<h3>介绍 / 内容</h3>" +
             "<div class='detail-actions'>" +
               "<button type='button' data-detail-action='copy-title'>复制标题</button>" +
-              "<button type='button' data-detail-action='copy-content'" + (!record.description ? " disabled" : "") + ">复制完整介绍</button>" +
+              "<button type='button' data-detail-action='copy-content'>" + (record.description ? "复制完整介绍" : "复制已有说明") + "</button>" +
               "<button type='button' class='primary' data-detail-action='copy-full'>复制标题 + 内容</button>" +
               "<button type='button' data-detail-action='download-cover'" + (!(record.coverOriginal || record.cover) ? " disabled" : "") + ">下载封面</button>" +
             "</div>" +
@@ -1076,7 +1101,7 @@
     if (!record) return;
     var type = action.dataset.action;
     if (type === "copy-title") copyText(record.title, "标题");
-    if (type === "copy-content") copyText(record.description, "完整介绍");
+    if (type === "copy-content") copyText(contentText(record), record.description ? "内容" : "已有说明");
     if (type === "copy-provider") copyText(linksText(record, action.dataset.provider,
       action.dataset.includeUnavailable === "true"), providerName(action.dataset.provider) + "链接");
     if (type === "download-cover") downloadImage(record.cover || record.coverOriginal, record.title + "_封面");
@@ -1223,13 +1248,13 @@
     if (!button || !activeRecord) return;
     var action = button.dataset.detailAction;
     if (action === "copy-title") copyText(activeRecord.title, "标题");
-    if (action === "copy-content") copyText(activeRecord.description, "完整介绍");
+    if (action === "copy-content") copyText(contentText(activeRecord), activeRecord.description ? "内容" : "已有说明");
     if (action === "copy-full") copyText(shareText(activeRecord), "标题和内容");
     if (action === "download-cover") downloadImage(activeRecord.cover || activeRecord.coverOriginal, activeRecord.title + "_封面");
     if (action === "copy-plain") copyText(button.dataset.value, "链接");
     if (action === "copy-one-link") {
       var link = cloudLinks(activeRecord)[Number(button.dataset.linkIndex)];
-      copyText(String(link.url || "").trim(), providerName(link.provider) + "链接");
+      copyText(shareUrl(link), providerName(link.provider) + "链接");
     }
     if (action === "download-image") {
       var image = activeRecord.images[Number(button.dataset.imageIndex)];
